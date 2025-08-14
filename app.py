@@ -1,12 +1,14 @@
 
 
 import random
+import time
+
 import streamlit as st
 from vector_search import *
 import pymongo
 
 if "mode" not in st.session_state:
-    st.session_state["mode"] = "sign_in"  # default mode
+    st.session_state["mode"] = "headTopic"  # default mode
 
 if "query_text" not in st.session_state:
     st.session_state["query_text"] = ""
@@ -17,8 +19,8 @@ if "vector_search" not in st.session_state:
 if "topic" not in st.session_state:
     st.session_state["topic"] = ""
 
-if "userName" not in st.session_state:
-    st.session_state["userName"] = ""
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
 if "Password" not in st.session_state:
     st.session_state["Password"] = ""
 if "new_user" not in st.session_state:
@@ -53,58 +55,89 @@ with st.sidebar:
     #     st.session_state.topic = "Topic 2"
     if st.button("🔸Logout"):
         st.session_state.topic = "Topic 3"
+st.markdown("""
+            <style>
+            .main-topic {
+                font-size: 51px;
+                color: #ff6f00;
+                font-weight: bold;
+                text-align: center;
+                border-bottom: 2px solid #ff6f00;
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            </style>
+            <div class="main-topic">Academic Paper Recommender</div>
+        """, unsafe_allow_html=True)
+def headTopic():
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Login", key="move_to_sign_in_page"):
+            st.session_state["mode"] = "sign_in"
+
+
+    with col2:
+        if st.button("SignUp", key="move_to_sign_up_page"):
+            st.session_state["mode"] = "sign_up"
+
+
+
 
 
 def sign_up():
     st.title("🔐 Sign Up")
-    New_user_userName=st.text_input("Username")
-    New_user_password=st.text_input("Password",type="password")
+    New_user_userName=st.text_input("Username", key="signup_username")
+    New_user_password=st.text_input("Password",type="password", key="signup_password")
 
-    if st.button("Submit"):
-        st.session_state["new_user"]["New_user_userName"] = New_user_userName
-        st.session_state["new_user"]["New_user_password"] = New_user_password
-        st.session_state["new_user"]["submitted"] = True
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Submit", key="signup_button"):
+            st.session_state["new_user"]["New_user_userName"] = New_user_userName
+            st.session_state["new_user"]["New_user_password"] = New_user_password
+            st.session_state["new_user"]["submitted"] = True
 
-        id = f"{New_user_userName}{New_user_password}{New_user_userName}"
+            id = f"{New_user_userName}{New_user_password}{New_user_userName}"
 
-        if collection.find_one({"user_id": id}):
-            st.error("Username already exists. Try again.")
+            if collection.find_one({"user_id": id}):
+                st.error("Username already exists. Try again.")
 
-        else:
-            collection.update_one(
-                {"user_id": id},  # search filter
-                {"$setOnInsert": {  # only set if inserting
-                    "name": New_user_userName,
-                    "password": New_user_password
-                }},
-                upsert=True
-            )
-            print(f"User: {New_user_userName} account was created successfully.")
+            else:
+                collection.update_one(
+                    {"user_id": id},  # search filter
+                    {"$setOnInsert": {  # only set if inserting
+                        "name": New_user_userName,
+                        "password": New_user_password
+                    }},
+                    upsert=True
+                )
+                print(f"User: {New_user_userName} account was created successfully.")
+                time.sleep(1)
+                st.session_state['mode'] = 'sign_in'
 
-
-
-    if st.button("Sign In"):
-        sign_in()
-
-
-
-
-
-
+    with col2:
+        if st.button("Login", key="move_to_sign_in_page_button"):
+            st.session_state['mode'] = 'sign_in'
 
 
 def sign_in():
     st.title("🔐 Sign In")
-    userName=st.text_input("Username")
-    password = st.text_input("Password",type="password")
+    username=st.text_input("Usernames", key="sign_in_username_11")
+    password = st.text_input("Password",type="password", key="sign_in__password_11")
 
-    if st.button("Sign In"):
-        # Replace with real authentication logic
-        if userName and password == "chanura2004":  # Example password
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = userName
-        else:
-            st.error("Invalid credentials. Try again.")
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Sign In", key="sign_in_button"):
+            if collection.find_one({"name": username}) and collection.find_one({"password": password}):
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = username
+                st.session_state['mode'] = 'add_favourites'
+
+            else:
+                st.error("Invalid credentials. Try again.")
+
+    with col2:
+        if st.button("Create Account", key="move_to_sign_Up_page_button"):
+            st.session_state['mode'] = 'sign_up'
 
 
 def recommendation_system():
@@ -148,17 +181,26 @@ def add_favourites():
 
 
 
-if st.session_state["mode"] == "add_favourites":
+# if st.session_state["mode"] == "add_favourites":
+#     add_favourites()
+# elif st.session_state["mode"] == "recommendation":
+#     recommendation_system()
+# elif st.session_state["mode"] == "sign_in":
+#     sign_in()
+# elif st.session_state["mode"] == "sign_up":
+#     sign_up()
+
+# Initialize session state
+if st.session_state["mode"] == "headTopic":
+    headTopic()
+elif st.session_state["mode"] == "sign_in":
+    sign_in()
+elif st.session_state["mode"] == "sign_up":
+    sign_up()
+elif st.session_state["mode"] == "add_favourites":
     add_favourites()
 elif st.session_state["mode"] == "recommendation":
     recommendation_system()
-
-
-if not st.session_state["authenticated"]:
-    sign_up()
-else:
-    add_favourites()
-
 # if not st.button("Skip") or st.button("Done")   :
 #     add_favourites()
 
