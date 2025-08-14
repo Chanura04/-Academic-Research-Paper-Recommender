@@ -1,8 +1,9 @@
 
-
 import random
 import time
-
+import groq
+from dotenv import load_dotenv
+load_dotenv()
 import streamlit as st
 from vector_search import *
 import pymongo
@@ -35,11 +36,24 @@ if "selected_card" not in st.session_state:
 if "current_user_id" not in st.session_state:
     st.session_state.current_user_id = ""
 
+if "liked" not in st.session_state:
+    st.session_state["liked"] = False
+if "liked_papers" not in st.session_state:
+    st.session_state["liked_papers"] = set()
+if "liked_papers_info" not in st.session_state:
+    st.session_state["liked_papers_info"] = []
+if "paper_info" not in st.session_state:
+    st.session_state["paper_info"] = ""
 
-client = MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/")
-db =  client["RecommendationSystemDB"]
-collection =db['UserData']
+if "results" not in st.session_state:
+    st.session_state["results"] = []
+if "summery" not in st.session_state:
+    st.session_state["summery"] = ""
 
+client = MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/", connect=False)
+db = client["RecommendationSystemDB"]
+collection = db['UserData']
+paper_collection = db['Data']
 
 with st.sidebar:
     st.markdown("""
@@ -49,7 +63,7 @@ with st.sidebar:
             align-items: center;
         }
         </style>
-    
+
         <div class="profile_icon">🙍🏻</div>
     """, unsafe_allow_html=True)
 
@@ -57,11 +71,11 @@ with st.sidebar:
 
     st.markdown("## 📚 Topics")
     if st.button("🔹Favourites"):
-        st.session_state.topic = "Topic 1"
-    # if st.button("🔹 Psychology aspects"):
-    #     st.session_state.topic = "Topic 2"
+        st.session_state["mode"] = "add_favourites"
+    if st.button("🔹 Liked"):
+        st.session_state["mode"] = "Liked"
     if st.button("🔸Logout"):
-        st.session_state.topic = "Topic 3"
+        st.session_state["mode"] = "Logout"
 st.markdown("""
             <style>
             .main-topic {
@@ -76,25 +90,23 @@ st.markdown("""
             </style>
             <div class="main-topic">Academic Paper Recommender</div>
         """, unsafe_allow_html=True)
+
+
 def headTopic():
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("Login", key="move_to_sign_in_page"):
             st.session_state["mode"] = "sign_in"
 
-
     with col2:
         if st.button("SignUp", key="move_to_sign_up_page"):
             st.session_state["mode"] = "sign_up"
 
 
-
-
-
 def sign_up():
     st.title("🔐 Sign Up")
-    New_user_userName=st.text_input("Username", key="signup_username")
-    New_user_password=st.text_input("Password",type="password", key="signup_password")
+    New_user_userName = st.text_input("Username", key="signup_username")
+    New_user_password = st.text_input("Password", type="password", key="signup_password")
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -128,14 +140,14 @@ def sign_up():
 
 def sign_in():
     st.title("🔐 Sign In")
-    username=st.text_input("Usernames", key="sign_in_username_11")
-    password = st.text_input("Password",type="password", key="sign_in__password_11")
+    username = st.text_input("Usernames", key="sign_in_username_11")
+    password = st.text_input("Password", type="password", key="sign_in__password_11")
 
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("Sign In", key="sign_in_button"):
             if collection.find_one({"name": username}) and collection.find_one({"password": password}):
-                st.session_state.current_user_id=collection.find_one({"name": username})['user_id']
+                st.session_state.current_user_id = collection.find_one({"name": username})['user_id']
                 st.session_state["authenticated"] = True
                 st.session_state["username"] = username
                 st.session_state['mode'] = 'add_favourites'
@@ -148,9 +160,47 @@ def sign_in():
             st.session_state['mode'] = 'sign_up'
 
 
-def recommendation_system():
+def predict_gender(pdf_url):
+    prompt = f"""
+    Read the research paper at {pdf_url}. Based on its abstract and main content, generate:
 
-    st.title("Academic Paper Recommender")
+    1. A short summary (1–2 sentences) that captures the core idea.
+    2. A long summary (3–5 bullet points) covering key findings, methods, and implications.
+
+    Use clear, concise language suitable for students and researchers.
+    """
+
+    response = groq.Groq().chat.completions.create(
+        model='llama3-70b-8192',
+
+        messages=[{
+            "role": "user",
+            "content": prompt
+        }]
+    )
+    predicted_gender = response.choices[0].message.content.strip()
+    return predicted_gender
+
+
+if "previous_papers" not in st.session_state:
+    st.session_state.previous_papers = ""
+
+
+def add_liked_papers_to_db():
+    st.session_state.previous_papers = collection.find_one({"user_id": st.session_state.current_user_id})['Favourites']
+
+    for previous_paper in st.session_state.previous_papers:
+        if previous_paper not in st.session_state.selected_card:
+            st.session_state.selected_card.append(previous_paper)
+    collection.update_one(
+        {"user_id": st.session_state.current_user_id},
+        {"$push": {"User_Liked": list(st.session_state.liked_papers_info)}},
+        upsert=True
+    )
+
+
+def recommendation_system():
+    # st.title("Academic Paper Recommender")
 
     query_text = st.text_input("Search papers by keyword or topic:")
     max_results = st.slider("Number of results", 5, 100, 10)
@@ -158,19 +208,68 @@ def recommendation_system():
     if st.button("Fetch Papers"):
         st.write(f"Fetching {max_results} papers for query: {query_text}")
         vector_search = VectorSearch(query_text)
-        results = vector_search.encode_query()
-        for r in results:
-            st.markdown("---")
-            st.markdown(f"**Score:** {r.get('score', 0):.3f}")
-            st.markdown(f"**Title:** {r.get('title', 'No Title')}")
-            st.markdown(f"[PDF Link]({r.get('pdf_url', '#')})")
-            st.markdown("---")
+        st.session_state["results"] = vector_search.encode_query()
+
+    for idx, r in enumerate(st.session_state["results"]):
+
+        st.session_state.summery = predict_gender(r.get('pdf_url'))
+        st.markdown("---")
+        st.markdown(f"****Title:**** {r.get('title', 'No Title')}")
+        st.markdown(f"{st.session_state.summery}")
+
+        st.markdown(f"[PDF Link]({r.get('pdf_url', '#')})")
+        st.markdown(f"**Search Accuracy:** {r.get('score', 0):.3f}")
+
+        col1, col2 = st.columns([1, 4])
+
+        with col1:
+
+            if st.button("❤️", key=f"like_{idx}"):
+                isTrue = True
+                if idx in st.session_state["liked_papers"]:
+                    st.session_state["liked_papers"].remove(idx)
+                    st.session_state.liked_papers_info.remove(st.session_state.paper_info)
+                    isTrue = False
+                if isTrue:
+                    st.session_state["liked_papers"].add(idx)  # store index in set
+                    st.session_state.paper_info = (r.get('_id'), r.get('title', 'No Title'), r.get('pdf_url', '#'),
+                                                   st.session_state.summery)
+
+                    st.session_state.liked_papers_info.append(st.session_state.paper_info)
+
+        with col2:
+            if idx in st.session_state["liked_papers"]:
+                st.markdown(
+                    "<span style='color:#ff4b4b; font-weight:bold;'>You liked this!</span>",
+                    unsafe_allow_html=True
+                )
+        st.markdown("---")
+
+        add_liked_papers_to_db()
+
+    st.write(st.session_state.liked_papers_info)
+
+
+if "previous_favourites" not in st.session_state:
+    st.session_state.previous_favourites = ""
+
 
 def add_favourites_to_db():
+    st.session_state.previous_favourites = collection.find_one({"user_id": st.session_state.current_user_id})[
+        'Favourites']
+
+    for previous_favourite in st.session_state.previous_favourites:
+        if previous_favourite not in st.session_state.selected_card:
+            st.session_state.selected_card.append(previous_favourite)
+
     collection.update_one(
         {"user_id": st.session_state.current_user_id},
-        {"$set": {"favourites": st.session_state.selected_card}}
+        {"$push": {"Favourites": st.session_state.selected_card}}, upsert=True
     )
+
+
+# $addToSet will avoid the duplications
+
 def add_favourites():
     global removed_card
     st.markdown("""
@@ -205,63 +304,60 @@ def add_favourites():
     </style>
     """, unsafe_allow_html=True)
     cards = ["Machine Learning", "AI", "Cyber Security", "Deep Learning"]
-    removed_card=""
+    removed_card = ""
 
     for card in cards:
-        add_card=True
+        add_card = True
 
         if st.button(f"🎯 {card}", key=card):
             for removing_card in st.session_state.selected_card:
                 if removing_card == card:
                     st.session_state.selected_card.remove(card)
-                    removed_card=card
-                    add_card=False
+                    removed_card = card
+                    add_card = False
                     break
             if add_card:
                 st.session_state.selected_card.append(card)
 
-
     for clicked_card in st.session_state.selected_card:
-        if not clicked_card==removed_card:
+        if not clicked_card == removed_card:
             st.success(f"You selected: {clicked_card}")
-    if removed_card!="":
+    if removed_card != "":
         st.warning(f"Removed {removed_card} from selected cards.")
         # st.write(st.session_state.selected_card)
 
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("Skip"):
-            add_favourites_to_db()
+            if st.session_state.selected_card:
+                add_favourites_to_db()
             time.sleep(2)
             st.session_state["mode"] = "recommendation"
     with col2:
         if st.button("Done"):
-            add_favourites_to_db()
+            if st.session_state.selected_card:
+                add_favourites_to_db()
             time.sleep(2)
             st.session_state["mode"] = "recommendation"
 
 
+if st.session_state["mode"] == "headTopic":
+    headTopic()
+elif st.session_state["mode"] == "sign_in":
+    sign_in()
+elif st.session_state["mode"] == "sign_up":
+    sign_up()
+elif st.session_state["mode"] == "add_favourites":
+    add_favourites()
+elif st.session_state["mode"] == "recommendation":
+    recommendation_system()
+# recommendation_system()
 
 
-
-
-
-
-#
-# if st.session_state["mode"] == "headTopic":
-#     headTopic()
-# elif st.session_state["mode"] == "sign_in":
-#     sign_in()
-# elif st.session_state["mode"] == "sign_up":
-#     sign_up()
-# elif st.session_state["mode"] == "add_favourites":
-#     add_favourites()
-# elif st.session_state["mode"] == "recommendation":
-#     recommendation_system()
-recommendation_system()
-
-
-
+try:
+    client.admin.command('ping')
+except Exception as e:
+    st.error(f"Connection failed: {e}")
 
 
 
