@@ -29,6 +29,11 @@ if "new_user" not in st.session_state:
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
+if "selected_card" not in st.session_state:
+    st.session_state.selected_card = []
+
+
+
 
 client = MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/")
 db =  client["RecommendationSystemDB"]
@@ -141,7 +146,7 @@ def sign_in():
 
 
 def recommendation_system():
-    # abstract = st.text_area("Paste abstract here:")
+
     st.title("Academic Paper Recommender")
 
     query_text = st.text_input("Search papers by keyword or topic:")
@@ -159,17 +164,61 @@ def recommendation_system():
 
 
 def add_favourites():
+    global removed_card
     st.markdown("""
             <style>
             .profile_icon {
                 font-size: 32px;
-                align-items: center;
+                align-items: left;
             }
             </style>
-
+            <br>
             <div class="profile_icon"><b>Add your Favourites!!</b></div>
         """, unsafe_allow_html=True)
 
+    st.markdown("""
+    <style>
+    .card {
+        display: inline-flex;
+        padding: 0.6rem 1rem;
+        margin: 0.5rem;
+        border-radius: 10px;
+        background: rgba(225, 25, 125, 0.8);
+        color: white;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.3s ease;
+    }
+    .card:hover {
+        transform: translateY(-3px);
+    }
+    .card.selected {
+        background: rgba(25, 125, 225, 0.9); /* selected color */
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    cards = ["Machine Learning", "AI", "Cyber Security", "Deep Learning"]
+    removed_card=""
+
+    for card in cards:
+        add_card=True
+
+        if st.button(f"🎯 {card}", key=card):
+            for removing_card in st.session_state.selected_card:
+                if removing_card == card:
+                    st.session_state.selected_card.remove(card)
+                    removed_card=card
+                    add_card=False
+                    break
+            if add_card:
+                st.session_state.selected_card.append(card)
+
+
+    for clicked_card in st.session_state.selected_card:
+        if not clicked_card==removed_card:
+            st.success(f"You selected: {clicked_card}")
+    if removed_card!="":
+        st.warning(f"Removed {removed_card} from selected cards.")
+        st.write(st.session_state.selected_card)
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("Skip"):
@@ -181,28 +230,22 @@ def add_favourites():
 
 
 
-# if st.session_state["mode"] == "add_favourites":
-#     add_favourites()
-# elif st.session_state["mode"] == "recommendation":
-#     recommendation_system()
+
+
+
+
+
+# if st.session_state["mode"] == "headTopic":
+#     headTopic()
 # elif st.session_state["mode"] == "sign_in":
 #     sign_in()
 # elif st.session_state["mode"] == "sign_up":
 #     sign_up()
-
-# Initialize session state
-if st.session_state["mode"] == "headTopic":
-    headTopic()
-elif st.session_state["mode"] == "sign_in":
-    sign_in()
-elif st.session_state["mode"] == "sign_up":
-    sign_up()
-elif st.session_state["mode"] == "add_favourites":
-    add_favourites()
-elif st.session_state["mode"] == "recommendation":
-    recommendation_system()
-# if not st.button("Skip") or st.button("Done")   :
+# elif st.session_state["mode"] == "add_favourites":
 #     add_favourites()
+# elif st.session_state["mode"] == "recommendation":
+#     recommendation_system()
+add_favourites()
 
 
 
