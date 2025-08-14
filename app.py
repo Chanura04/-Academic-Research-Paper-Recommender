@@ -32,7 +32,8 @@ if "authenticated" not in st.session_state:
 if "selected_card" not in st.session_state:
     st.session_state.selected_card = []
 
-
+if "current_user_id" not in st.session_state:
+    st.session_state.current_user_id = ""
 
 
 client = MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/")
@@ -51,7 +52,8 @@ with st.sidebar:
     
         <div class="profile_icon">🙍🏻</div>
     """, unsafe_allow_html=True)
-    # st.title('🙍🏻‍♂️')
+
+    st.write(f"{st.session_state.username} Welcome to Academic Paper Recommender")
 
     st.markdown("## 📚 Topics")
     if st.button("🔹Favourites"):
@@ -133,6 +135,7 @@ def sign_in():
     with col1:
         if st.button("Sign In", key="sign_in_button"):
             if collection.find_one({"name": username}) and collection.find_one({"password": password}):
+                st.session_state.current_user_id=collection.find_one({"name": username})['user_id']
                 st.session_state["authenticated"] = True
                 st.session_state["username"] = username
                 st.session_state['mode'] = 'add_favourites'
@@ -157,12 +160,17 @@ def recommendation_system():
         vector_search = VectorSearch(query_text)
         results = vector_search.encode_query()
         for r in results:
+            st.markdown("---")
             st.markdown(f"**Score:** {r.get('score', 0):.3f}")
             st.markdown(f"**Title:** {r.get('title', 'No Title')}")
             st.markdown(f"[PDF Link]({r.get('pdf_url', '#')})")
             st.markdown("---")
 
-
+def add_favourites_to_db():
+    collection.update_one(
+        {"user_id": st.session_state.current_user_id},
+        {"$set": {"favourites": st.session_state.selected_card}}
+    )
 def add_favourites():
     global removed_card
     st.markdown("""
@@ -218,13 +226,18 @@ def add_favourites():
             st.success(f"You selected: {clicked_card}")
     if removed_card!="":
         st.warning(f"Removed {removed_card} from selected cards.")
-        st.write(st.session_state.selected_card)
+        # st.write(st.session_state.selected_card)
+
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("Skip"):
+            add_favourites_to_db()
+            time.sleep(2)
             st.session_state["mode"] = "recommendation"
     with col2:
         if st.button("Done"):
+            add_favourites_to_db()
+            time.sleep(2)
             st.session_state["mode"] = "recommendation"
 
 
@@ -234,7 +247,7 @@ def add_favourites():
 
 
 
-
+#
 # if st.session_state["mode"] == "headTopic":
 #     headTopic()
 # elif st.session_state["mode"] == "sign_in":
@@ -245,7 +258,7 @@ def add_favourites():
 #     add_favourites()
 # elif st.session_state["mode"] == "recommendation":
 #     recommendation_system()
-add_favourites()
+recommendation_system()
 
 
 
