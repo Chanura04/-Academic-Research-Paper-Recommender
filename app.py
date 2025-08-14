@@ -50,7 +50,7 @@ if "results" not in st.session_state:
 if "summery" not in st.session_state:
     st.session_state["summery"] = ""
 
-client = MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/", connect=False)
+client = pymongo.MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/", connect=False)
 db = client["RecommendationSystemDB"]
 collection = db['UserData']
 paper_collection = db['Data']
@@ -187,14 +187,15 @@ if "previous_papers" not in st.session_state:
 
 
 def add_liked_papers_to_db():
-    st.session_state.previous_papers = collection.find_one({"user_id": st.session_state.current_user_id})['Favourites']
+    if collection.find_one({"user_id": st.session_state.current_user_id}) and "User_Liked" in collection.find_one({"user_id": st.session_state.current_user_id}) and collection.find_one({"user_id": st.session_state.current_user_id})["User_Liked"]:
+        st.session_state.previous_papers = collection.find_one({"user_id": st.session_state.current_user_id})['User_Liked']
 
     for previous_paper in st.session_state.previous_papers:
         if previous_paper not in st.session_state.selected_card:
             st.session_state.selected_card.append(previous_paper)
     collection.update_one(
         {"user_id": st.session_state.current_user_id},
-        {"$push": {"User_Liked": list(st.session_state.liked_papers_info)}},
+        {"$set": {"User_Liked": list(st.session_state.liked_papers_info)}},
         upsert=True
     )
 
@@ -228,7 +229,7 @@ def recommendation_system():
                 isTrue = True
                 if idx in st.session_state["liked_papers"]:
                     st.session_state["liked_papers"].remove(idx)
-                    st.session_state.liked_papers_info.remove(st.session_state.paper_info)
+                    st.session_state.liked_papers_info.remove(r[idx])
                     isTrue = False
                 if isTrue:
                     st.session_state["liked_papers"].add(idx)  # store index in set
@@ -255,8 +256,8 @@ if "previous_favourites" not in st.session_state:
 
 
 def add_favourites_to_db():
-    st.session_state.previous_favourites = collection.find_one({"user_id": st.session_state.current_user_id})[
-        'Favourites']
+    if collection.find_one({"user_id": st.session_state.current_user_id}) and "Favourites" in collection.find_one({"user_id": st.session_state.current_user_id}) and collection.find_one({"user_id": st.session_state.current_user_id})["Favourites"]:
+        st.session_state.previous_favourites = collection.find_one({"user_id": st.session_state.current_user_id})['Favourites']
 
     for previous_favourite in st.session_state.previous_favourites:
         if previous_favourite not in st.session_state.selected_card:
@@ -264,7 +265,7 @@ def add_favourites_to_db():
 
     collection.update_one(
         {"user_id": st.session_state.current_user_id},
-        {"$push": {"Favourites": st.session_state.selected_card}}, upsert=True
+        {"$set": {"Favourites": st.session_state.selected_card}}, upsert=True
     )
 
 
@@ -361,6 +362,7 @@ except Exception as e:
 
 
 
-
+#solve the liked item adding ,removing
+#check skip button in favourite without clicking one of  them
 
 

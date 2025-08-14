@@ -1,2 +1,3 @@
 hf_xet
 tf-keras
+#pip install --upgrade pymongo
