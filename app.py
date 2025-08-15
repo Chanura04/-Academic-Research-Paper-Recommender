@@ -7,6 +7,14 @@ load_dotenv()
 import streamlit as st
 from vector_search import *
 import pymongo
+import certifi
+from pymongo import MongoClient
+
+client = MongoClient(
+    "mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/",
+    tlsCAFile=certifi.where()
+)
+
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = "headTopic"  # default mode
@@ -50,7 +58,8 @@ if "results" not in st.session_state:
 if "summery" not in st.session_state:
     st.session_state["summery"] = ""
 
-client = pymongo.MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/", connect=False)
+client = pymongo.MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/")
+# client=pymongo.MongoClient("mongodb+srv://Chanura04:chanura2004@academicresearchpaperre.fibwqgy.mongodb.net/my_database?retryWrites=true&w=majority")
 db = client["RecommendationSystemDB"]
 collection = db['UserData']
 paper_collection = db['Data']
@@ -189,16 +198,30 @@ if "previous_papers" not in st.session_state:
 def add_liked_papers_to_db():
     if collection.find_one({"user_id": st.session_state.current_user_id}) and "User_Liked" in collection.find_one({"user_id": st.session_state.current_user_id}) and collection.find_one({"user_id": st.session_state.current_user_id})["User_Liked"]:
         st.session_state.previous_papers = collection.find_one({"user_id": st.session_state.current_user_id})['User_Liked']
+    else:
+        st.session_state.previous_papers = []
 
-    for previous_paper in st.session_state.previous_papers:
-        if previous_paper not in st.session_state.selected_card:
-            st.session_state.selected_card.append(previous_paper)
+    all_liked_papers = []
+    # for previous_paper in st.session_state.previous_papers:
+    #     if previous_paper not in st.session_state.liked_papers_info:
+    #         st.session_state.liked_papers_info.append(previous_paper)
+    for paper in st.session_state.previous_papers:
+        if paper not in all_liked_papers:
+            all_liked_papers.append(paper)
+
+    # Add current session likes
+    for paper in st.session_state.liked_papers_info:
+        if paper not in all_liked_papers:
+            all_liked_papers.append(paper)
+
+    st.session_state.liked_papers_info = all_liked_papers
     collection.update_one(
         {"user_id": st.session_state.current_user_id},
-        {"$set": {"User_Liked": list(st.session_state.liked_papers_info)}},
+        {"$set": {"User_Liked": st.session_state.liked_papers_info}},
         upsert=True
     )
-
+if "liked_papers_dict" not in st.session_state:
+    st.session_state["liked_papers_dict"] = {}
 
 def recommendation_system():
     # st.title("Academic Paper Recommender")
@@ -212,7 +235,7 @@ def recommendation_system():
         st.session_state["results"] = vector_search.encode_query()
 
     for idx, r in enumerate(st.session_state["results"]):
-
+        st.session_state.paper_id = r.get('_id')
         st.session_state.summery = predict_gender(r.get('pdf_url'))
         st.markdown("---")
         st.markdown(f"****Title:**** {r.get('title', 'No Title')}")
@@ -229,14 +252,16 @@ def recommendation_system():
                 isTrue = True
                 if idx in st.session_state["liked_papers"]:
                     st.session_state["liked_papers"].remove(idx)
-                    st.session_state.liked_papers_info.remove(r[idx])
+                if  st.session_state.paper_id in st.session_state.liked_papers_info:
+                    st.session_state["liked_papers_info"].remove( st.session_state.liked_papers_info.index(st.session_state.paper_id))
                     isTrue = False
                 if isTrue:
                     st.session_state["liked_papers"].add(idx)  # store index in set
-                    st.session_state.paper_info = (r.get('_id'), r.get('title', 'No Title'), r.get('pdf_url', '#'),
-                                                   st.session_state.summery)
+                    st.session_state.paper_info =[ r.get('_id'), r.get('title', 'No Title'), r.get('pdf_url', '#'),
+                                                   st.session_state.summery ]
 
-                    st.session_state.liked_papers_info.append(st.session_state.paper_info)
+                    if st.session_state.paper_info not in st.session_state.liked_papers_info:
+                        st.session_state.liked_papers_info.append(st.session_state.paper_info)
 
         with col2:
             if idx in st.session_state["liked_papers"]:
